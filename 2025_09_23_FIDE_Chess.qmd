@@ -14,11 +14,13 @@ code-fold: true
 #| warning: false
 
 library(tidyverse)
+library(knitr)
+library(emmeans)
 ```
 
 # Intro
 
-## FIDE Chess Player Ratings Background (*[Git](https://www.fide.com/fide-september-2025-rating-list-vincent-keymer-debuts-in-top-10-open/)*)
+## FIDE Chess Player Ratings Background (*[Git](https://github.com/rfordatascience/tidytuesday/tree/main/data/2025/2025-09-23*))
 
 This week we're exploring August and September chess player rating data from FIDE (the International Chess Federation). Monthly data files are published on the [FIDE website](https://www.fide.com/fide-september-2025-rating-list-vincent-keymer-debuts-in-top-10-open/).
 
@@ -37,7 +39,7 @@ Thank you to Jessica Moore for curating this week's dataset.
 
 ## Cleaning Data
 
-Cleaning script provided by readme on [Git](https://www.fide.com/fide-september-2025-rating-list-vincent-keymer-debuts-in-top-10-open/).
+Cleaning script provided by readme on [Git](https://github.com/rfordatascience/tidytuesday/tree/main/data/2025/2025-09-23).
 
 Script makes use of the *withr* package, which I've never seen or used. According to the [documentation](https://github.com/r-lib/withr#readme), *withr* helps run code with safely and temporily modified global state so that code is less error-prone.
 
@@ -48,7 +50,7 @@ The script fixes up some names with regex, filters to active players (past year)
 ## Loading Data
 
 ```{r}
-#| label: load-data 
+#| label: load-data
 #| output: false
 
 tuesdata <- tidytuesdayR::tt_load('2025-09-23')
@@ -57,23 +59,35 @@ fide_ratings_august <- tuesdata$fide_ratings_august
 fide_ratings_september <- tuesdata$fide_ratings_september
 ```
 
-# Exploratory Analysis
+## Wrangle
 
 ```{r}
-#| label: wrangle
+#| label: join-raw
 
-c_col_type_int <- c(
+tb_ratings_raw <- bind_rows(list(August = fide_ratings_august, September = fide_ratings_september), .id = "month") |> 
+    arrange(id, month)
 
-)
+n_active <- n_distinct(tb_ratings_raw$id)
 
-tb_ratings_august <- fide_ratings_august |>
-    filter(games > 0) |> 
+tb_removed <- anti_join(fide_ratings_august, fide_ratings_september, "id")
+tb_added <- anti_join(fide_ratings_september, fide_ratings_august, "id")
+```
+
+`r n_distinct(tb_removed$id)` members were removed, while `r n_distinct(tb_added$id)` members were added in September.
+
+```{r}
+#| label: FUNCTION-wrangle-ratings
+
+wrangle_ratings <- function(tb_ratings) {
+  tb_ratings |>
+    filter(games > 0) |>
     mutate(
-        across(where(is.double), as.integer),
-        across(!name & where(is.character), as.factor),
-        age = year(today()) - bday
-        ) |> 
-    mutate(age_range = case_when(
+      across(where(is.double), as.integer),
+      across(!name & where(is.character), as.factor),
+      age = year(today()) - bday
+    ) |>
+    mutate(
+      age_range = case_when(
         between(age, 5, 9) ~ "5 - 9",
         between(age, 10, 14) ~ "10 - 14",
         between(age, 15, 19) ~ "15 - 19",
@@ -83,92 +97,161 @@ tb_ratings_august <- fide_ratings_august |>
         between(age, 40, 49) ~ "40 - 49",
         between(age, 50, 69) ~ "50 - 59",
         age >= 60 ~ "over 60",
-    )) |> 
-    mutate(age_range = factor(
-        age_range, 
-        c("5 - 9", "10 - 14", "15 - 19", "20 - 24", "25 - 29", 
-        "30 - 39", "40 - 49", "50 - 59", "over 60"))) |> 
+      )
+    ) |>
+    mutate(
+      age_range = factor(
+        age_range,
+        c(
+          "5 - 9",
+          "10 - 14",
+          "15 - 19",
+          "20 - 24",
+          "25 - 29",
+          "30 - 39",
+          "40 - 49",
+          "50 - 59",
+          "over 60"
+        )
+      )
+    ) |>
     relocate(age_range)
-
-view(tb_ratings_august)
+}
 ```
 
+Setting up age ranges and removing records of people who didn't play a game.
+
+```{r}
+#| label: wrangle
+
+tb_ratings <- wrangle_ratings(tb_ratings_raw)
+```
+
+# Exploratory Analysis
+
+## Not Everyone Played
 ```{r}
 #| label: basic-stats
+#| tbl-cap: Not all active players actually played a game.
 
-n_active_aug <- length(fide_ratings_august$id)
-n_logged_aug <- length(tb_ratings_august$id)
-percent_log_aug <- round(n_logged_aug / n_active_aug * 100, 0)
-```
-
-Of the **`r n_active_aug`** active players in August, **`r n_logged_aug` (`r percent_log_aug`%)** FIDE chess players actually logged a game that month.
-
-
-```{r}
-#| label: age-stats
-
-tb_age_quant_aug <- tb_ratings_august |>
-    group_by(sex) |> 
-    reframe(
-        prob = c(0, 0.1, 0.5, 0.9, 1),
-        quant = quantile(age, prob)
+tb_ratings_summary <- tb_ratings_raw |> 
+    group_by(month) |> 
+    summarise(
+        n_active = n_distinct(id),
+        n_logged = sum(games > 0),
+        percent_log = round(n_logged / n_active * 100, 1)
         )
 
-# plt_age_hist_aug <- 
-tb_ratings_august |> 
-    ggplot(aes((year(today()) - bday))) +
-    geom_histogram() +
-    labs(x = "age")
+kable(tb_ratings_summary)
+```
+
+Only around 22% of the active players actually logged a game.
+
+## Age and Sex
+```{r}
+#| label: age-stats
+#| tbl-cap: Age quantiles by sex.
+
+tb_age_quant <- tb_ratings |>
+  distinct(id, .keep_all = T) |> 
+  group_by(sex) |>
+  reframe(
+    prob = c(0, 0.1, 0.5, 0.9, 1),
+    quant = quantile(age, prob)
+  )
+
+kable(tb_age_quant)
 ```
 
 ```{r}
-#| label: age-rating-stats
+#| label: age-plt
+#| fig-cap: Lots of young people for both sexes may indicate chess is growing. The male chess player population has a denser, longer tail of older players than does the female population. 
 
-tb_age_rating_aug <- tb_ratings_august |> 
-    group_by(age, sex) |> 
-    summarize(
-        n_people = n(),
-        median_rating = median(rating)
-        ) |> 
-    relocate(sex, 1) |> 
-    arrange(sex, age)
-
-tb_age_rating_aug |> 
-    ggplot(aes(age, median_rating, size = n_people, alpha = 0.7)) +
-    geom_point() +
-    facet_wrap(vars(sex))
+# plt_age_hist_aug <-
+tb_ratings |>
+  distinct(id, .keep_all = T) |> 
+  ggplot(aes(age, sex, fill = sex)) +
+  geom_violin()
 ```
 
+## Age and Rating
+```{r}
+#| label: age-rating-stats
+#| fig-cap: The median rating at each age peaks around 25. Data too sparse in some places to take the median at every age. 
+
+tb_age_rating <- tb_ratings |>
+  group_by(age, sex, month) |>
+  summarize(
+    n_people = n(),
+    median_rating = median(rating)
+  ) |>
+  relocate(sex, 1) |>
+  arrange(sex, age)
+
+tb_age_rating |>
+  ggplot(aes(age, median_rating, size = n_people, color = month, alpha = 0.7)) +
+  geom_point() +
+  facet_wrap(vars(sex))
+```
+
+Median Elo seems to peak around 25, but some of the data is too sparse in places. Need to use age groups. Also, looks like rating inflate.
+
+```{r}
+#| label: pairwise-t-test
+
+tb_ratings_both <- tb_ratings |> 
+  anti_join(bind_rows(tb_added, tb_removed), join_by(id)) |> 
+  mutate(id = factor(id))
+
+tb_ratings_both_wide <- tb_ratings_both |> 
+  pivot_wider(names_from = month, values_from = c(rating, games)) |> 
+  drop_na(contains("game"))
+
+tb_ratings_change <- tb_ratings_both_wide |> 
+  mutate(rating_change = rating_September - rating_August)
+```
+
+```{r}
+#| label: plt-rating-change-hist
+
+tb_ratings_change |> 
+  ggplot(aes(rating_change)) +
+  geom_histogram()
+
+t.test(tb_ratings_change$rating_change)
+```
+
+There was a mean improvement in Elo of `r round(mean(tb_ratings_change$rating_change), 0)` .
 
 ```{r}
 #| label: title-stats
 
-tb_title_summary <- tb_ratings_august |> 
-    group_by(sex) |> 
-    count(title, name = "n_people") |> 
-    add_count(sex, wt = n_people, name = "total") |> 
-    mutate(percent_title = round(n_people / total * 100, 2))
+tb_title_summary <- tb_ratings |>
+  group_by(sex, month) |>
+  count(title, name = "n_people") |>
+  add_count(sex, wt = n_people, name = "total") |>
+  mutate(percent_title = round(n_people / total * 100, 2))
 
-tb_ratings_august |> 
-    filter(!is.na(title)) |> 
-    ggplot(aes(title)) +
-    geom_histogram(stat = "count") +
-    facet_wrap(vars(sex))
+tb_ratings_august |>
+  filter(!is.na(title)) |>
+  ggplot(aes(title)) +
+  geom_histogram(stat = "count") +
+  facet_wrap(vars(sex))
 ```
 
 ```{r}
 #| label: sex-ratio-age
 
-tb_sex_ratio <- tb_ratings_august |> 
-    group_by(sex, fed) |> 
-    count(age_range, name = "n_people") |> 
-    pivot_wider(names_from = sex, values_from = n_people) |> 
-    mutate(sex_ratio = M / F)
+tb_sex_ratio <- tb_ratings_august |>
+  group_by(sex, fed) |>
+  count(age_range, name = "n_people") |>
+  pivot_wider(names_from = sex, values_from = n_people) |>
+  mutate(sex_ratio = M / F)
 
-tb_sex_ratio |> 
-    ggplot(aes(fct_rev(age_range), sex_ratio, size = F + M)) +
-    geom_point() +
-    labs(x = "age", y = "sex ratio (M:F)")
+tb_sex_ratio |>
+  ggplot(aes(fct_rev(age_range), sex_ratio, size = F + M)) +
+  geom_point() +
+  labs(x = "age", y = "sex ratio (M:F)")
 ```
 
 Wanted to look at sex ratios by Fed, but there are 166 Feds. Might be cool to make a map of total chess players and sex ratio by Fed over time.
