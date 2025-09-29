@@ -110,14 +110,15 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(tidyverse)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(tidyverse)</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(knitr)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
 </section>
 <section id="intro" class="level1">
 <h1>Intro</h1>
 <section id="fide-chess-player-ratings-background-git" class="level2">
-<h2 class="anchored" data-anchor-id="fide-chess-player-ratings-background-git">FIDE Chess Player Ratings Background (*<a href="https://github.com/rfordatascience/tidytuesday/tree/main/data/2025/2025-09-23*">Git</a></h2>
+<h2 class="anchored" data-anchor-id="fide-chess-player-ratings-background-git">FIDE Chess Player Ratings Background (*<a href="https://github.com/rfordatascience/tidytuesday/tree/main/data/2025/2025-09-23*">Git</a>)</h2>
 <p>This week we’re exploring August and September chess player rating data from FIDE (the International Chess Federation). Monthly data files are published on the <a href="https://www.fide.com/fide-september-2025-rating-list-vincent-keymer-debuts-in-top-10-open/">FIDE website</a>.</p>
 <p>A chess rating (Elo) is an estimate of a player’s strength relative to other players. If a player performs better or worse than expected, their rating increases or decreases accordingly.</p>
 <p>The September 2025 rating list was shaped primarily by results from the Sinquefield Cup, Quantbox Chennai Grand Masters, 61st International Akiba Rubinstein Chess Festival, and the Spanish League Honor Division 2025 – a Swiss team tournament held in Linares.</p>
@@ -149,67 +150,276 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </details>
 </div>
 </section>
+<section id="wrangle" class="level2">
+<h2 class="anchored" data-anchor-id="wrangle">Wrangle</h2>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>tb_ratings_raw <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(<span class="fu">list</span>(<span class="at">August =</span> fide_ratings_august, <span class="at">September =</span> fide_ratings_september), <span class="at">.id =</span> <span class="st">"month"</span>) <span class="sc">|&gt;</span> </span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">arrange</span>(id, month)</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>n_active <span class="ot">&lt;-</span> dplyr<span class="sc">::</span><span class="fu">n_distinct</span>(tb_ratings_raw<span class="sc">$</span>id)</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>tb_removed <span class="ot">&lt;-</span> <span class="fu">anti_join</span>(fide_ratings_august, fide_ratings_september, <span class="st">"id"</span>)</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>tb_added <span class="ot">&lt;-</span> <span class="fu">anti_join</span>(fide_ratings_september, fide_ratings_august, <span class="st">"id"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+<p>5033 members were removed, while 7206 members were added in September.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>wrangle_ratings <span class="ot">&lt;-</span> <span class="cf">function</span>(tb_ratings) {</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>  tb_ratings <span class="sc">|&gt;</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">filter</span>(games <span class="sc">&gt;</span> <span class="dv">0</span>) <span class="sc">|&gt;</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>      <span class="fu">across</span>(<span class="fu">where</span>(is.double), as.integer),</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>      <span class="fu">across</span>(<span class="sc">!</span>name <span class="sc">&amp;</span> <span class="fu">where</span>(is.character), as.factor),</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>      <span class="at">age =</span> <span class="fu">year</span>(<span class="fu">today</span>()) <span class="sc">-</span> bday</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    ) <span class="sc">|&gt;</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>      <span class="at">age_range =</span> <span class="fu">case_when</span>(</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>        <span class="fu">between</span>(age, <span class="dv">5</span>, <span class="dv">9</span>) <span class="sc">~</span> <span class="st">"5 - 9"</span>,</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>        <span class="fu">between</span>(age, <span class="dv">10</span>, <span class="dv">14</span>) <span class="sc">~</span> <span class="st">"10 - 14"</span>,</span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>        <span class="fu">between</span>(age, <span class="dv">15</span>, <span class="dv">19</span>) <span class="sc">~</span> <span class="st">"15 - 19"</span>,</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>        <span class="fu">between</span>(age, <span class="dv">20</span>, <span class="dv">24</span>) <span class="sc">~</span> <span class="st">"20 - 24"</span>,</span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>        <span class="fu">between</span>(age, <span class="dv">25</span>, <span class="dv">29</span>) <span class="sc">~</span> <span class="st">"25 - 29"</span>,</span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>        <span class="fu">between</span>(age, <span class="dv">30</span>, <span class="dv">39</span>) <span class="sc">~</span> <span class="st">"30 - 39"</span>,</span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>        <span class="fu">between</span>(age, <span class="dv">40</span>, <span class="dv">49</span>) <span class="sc">~</span> <span class="st">"40 - 49"</span>,</span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>        <span class="fu">between</span>(age, <span class="dv">50</span>, <span class="dv">69</span>) <span class="sc">~</span> <span class="st">"50 - 59"</span>,</span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>        age <span class="sc">&gt;=</span> <span class="dv">60</span> <span class="sc">~</span> <span class="st">"over 60"</span>,</span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>      )</span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>    ) <span class="sc">|&gt;</span></span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(</span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>      <span class="at">age_range =</span> <span class="fu">factor</span>(</span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>        age_range,</span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>        <span class="fu">c</span>(</span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>          <span class="st">"5 - 9"</span>,</span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a>          <span class="st">"10 - 14"</span>,</span>
+<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a>          <span class="st">"15 - 19"</span>,</span>
+<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a>          <span class="st">"20 - 24"</span>,</span>
+<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a>          <span class="st">"25 - 29"</span>,</span>
+<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a>          <span class="st">"30 - 39"</span>,</span>
+<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a>          <span class="st">"40 - 49"</span>,</span>
+<span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a>          <span class="st">"50 - 59"</span>,</span>
+<span id="cb4-34"><a href="#cb4-34" aria-hidden="true" tabindex="-1"></a>          <span class="st">"over 60"</span></span>
+<span id="cb4-35"><a href="#cb4-35" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb4-36"><a href="#cb4-36" aria-hidden="true" tabindex="-1"></a>      )</span>
+<span id="cb4-37"><a href="#cb4-37" aria-hidden="true" tabindex="-1"></a>    ) <span class="sc">|&gt;</span></span>
+<span id="cb4-38"><a href="#cb4-38" aria-hidden="true" tabindex="-1"></a>    <span class="fu">relocate</span>(age_range)</span>
+<span id="cb4-39"><a href="#cb4-39" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+<p>Setting up age ranges and removing records of people who didn’t play a game.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>tb_ratings <span class="ot">&lt;-</span> <span class="fu">wrangle_ratings</span>(tb_ratings_raw)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+</section>
 </section>
 <section id="exploratory-analysis" class="level1">
 <h1>Exploratory Analysis</h1>
+<section id="not-everyone-played" class="level2">
+<h2 class="anchored" data-anchor-id="not-everyone-played">Not Everyone Played</h2>
+<div class="cell" data-tbl-cap="Not all active players actually played a game.">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>tb_ratings_summary <span class="ot">&lt;-</span> tb_ratings_raw <span class="sc">|&gt;</span> </span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">group_by</span>(month) <span class="sc">|&gt;</span> </span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">summarise</span>(</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>        <span class="at">n_active =</span> dplyr<span class="sc">::</span><span class="fu">n_distinct</span>(id),</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>        <span class="at">n_logged =</span> <span class="fu">sum</span>(games <span class="sc">&gt;</span> <span class="dv">0</span>),</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>        <span class="at">percent_log =</span> <span class="fu">round</span>(n_logged <span class="sc">/</span> n_active <span class="sc">*</span> <span class="dv">100</span>, <span class="dv">1</span>)</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(tb_ratings_summary)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<caption>Not all active players actually played a game.</caption>
+<thead>
+<tr class="header">
+<th style="text-align: left;">month</th>
+<th style="text-align: right;">n_active</th>
+<th style="text-align: right;">n_logged</th>
+<th style="text-align: right;">percent_log</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">August</td>
+<td style="text-align: right;">200983</td>
+<td style="text-align: right;">45118</td>
+<td style="text-align: right;">22.4</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">September</td>
+<td style="text-align: right;">203156</td>
+<td style="text-align: right;">44750</td>
+<td style="text-align: right;">22.0</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<p>Only around 22% of the active players actually logged a game.</p>
+</section>
+<section id="age-and-sex" class="level2">
+<h2 class="anchored" data-anchor-id="age-and-sex">Age and Sex</h2>
+<div class="cell" data-tbl-cap="Age quantiles by sex.">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>tb_age_quant <span class="ot">&lt;-</span> tb_ratings <span class="sc">|&gt;</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">distinct</span>(id, <span class="at">.keep_all =</span> T) <span class="sc">|&gt;</span> </span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(sex) <span class="sc">|&gt;</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">reframe</span>(</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">prob =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="fl">0.1</span>, <span class="fl">0.5</span>, <span class="fl">0.9</span>, <span class="dv">1</span>),</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">quant =</span> <span class="fu">quantile</span>(age, prob)</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(tb_age_quant)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<caption>Age quantiles by sex.</caption>
+<thead>
+<tr class="header">
+<th style="text-align: left;">sex</th>
+<th style="text-align: right;">prob</th>
+<th style="text-align: right;">quant</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">F</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">6</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">F</td>
+<td style="text-align: right;">0.1</td>
+<td style="text-align: right;">10</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">F</td>
+<td style="text-align: right;">0.5</td>
+<td style="text-align: right;">15</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">F</td>
+<td style="text-align: right;">0.9</td>
+<td style="text-align: right;">35</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">F</td>
+<td style="text-align: right;">1.0</td>
+<td style="text-align: right;">91</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">4</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">0.1</td>
+<td style="text-align: right;">11</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">0.5</td>
+<td style="text-align: right;">21</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">0.9</td>
+<td style="text-align: right;">63</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">1.0</td>
+<td style="text-align: right;">98</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>c_col_type_int <span class="ot">&lt;-</span> <span class="fu">c</span>(</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>tb_ratings_august <span class="ot">&lt;-</span> fide_ratings_august <span class="sc">|&gt;</span></span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">filter</span>(games <span class="sc">&gt;</span> <span class="dv">0</span>) <span class="sc">|&gt;</span> </span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(</span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>        <span class="fu">across</span>(<span class="fu">where</span>(is.double), as.integer),</span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>        <span class="fu">across</span>(<span class="sc">!</span>name <span class="sc">&amp;</span> <span class="fu">where</span>(is.character), as.factor),</span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>        <span class="at">age =</span> <span class="fu">year</span>(<span class="fu">today</span>()) <span class="sc">-</span> bday</span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>        ) <span class="sc">|&gt;</span> </span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">age_range =</span> <span class="fu">case_when</span>(</span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>        <span class="fu">between</span>(age, <span class="dv">5</span>, <span class="dv">9</span>) <span class="sc">~</span> <span class="st">"5 - 9"</span>,</span>
-<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>        <span class="fu">between</span>(age, <span class="dv">10</span>, <span class="dv">14</span>) <span class="sc">~</span> <span class="st">"10 - 14"</span>,</span>
-<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>        <span class="fu">between</span>(age, <span class="dv">15</span>, <span class="dv">19</span>) <span class="sc">~</span> <span class="st">"15 - 19"</span>,</span>
-<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>        <span class="fu">between</span>(age, <span class="dv">20</span>, <span class="dv">24</span>) <span class="sc">~</span> <span class="st">"20 - 24"</span>,</span>
-<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>        <span class="fu">between</span>(age, <span class="dv">25</span>, <span class="dv">29</span>) <span class="sc">~</span> <span class="st">"25 - 29"</span>,</span>
-<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>        <span class="fu">between</span>(age, <span class="dv">30</span>, <span class="dv">39</span>) <span class="sc">~</span> <span class="st">"30 - 39"</span>,</span>
-<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>        <span class="fu">between</span>(age, <span class="dv">40</span>, <span class="dv">49</span>) <span class="sc">~</span> <span class="st">"40 - 49"</span>,</span>
-<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>        <span class="fu">between</span>(age, <span class="dv">50</span>, <span class="dv">69</span>) <span class="sc">~</span> <span class="st">"50 - 59"</span>,</span>
-<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>        age <span class="sc">&gt;=</span> <span class="dv">60</span> <span class="sc">~</span> <span class="st">"over 60"</span>,</span>
-<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>    )) <span class="sc">|&gt;</span> </span>
-<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">age_range =</span> <span class="fu">factor</span>(</span>
-<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>        age_range, </span>
-<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>        <span class="fu">c</span>(<span class="st">"5 - 9"</span>, <span class="st">"10 - 14"</span>, <span class="st">"15 - 19"</span>, <span class="st">"20 - 24"</span>, <span class="st">"25 - 29"</span>, </span>
-<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>        <span class="st">"30 - 39"</span>, <span class="st">"40 - 49"</span>, <span class="st">"50 - 59"</span>, <span class="st">"over 60"</span>))) <span class="sc">|&gt;</span> </span>
-<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>    <span class="fu">relocate</span>(age_range)</span>
-<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a><span class="fu">view</span>(tb_ratings_august)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co"># plt_age_hist_aug &lt;-</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>tb_ratings <span class="sc">|&gt;</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">distinct</span>(id, <span class="at">.keep_all =</span> T) <span class="sc">|&gt;</span> </span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(age, sex, <span class="at">fill =</span> sex)) <span class="sc">+</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_violin</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="2025_09_23_FIDE_Chess_files/figure-html/age-plt-1.png" class="img-fluid figure-img" width="672"></p>
+<figcaption>Lots of young people for both sexes may indicate chess is growing. The male chess player population has a denser, longer tail of older players than does the female population.</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="age-and-rating" class="level2">
+<h2 class="anchored" data-anchor-id="age-and-rating">Age and Rating</h2>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>tb_age_rating <span class="ot">&lt;-</span> tb_ratings <span class="sc">|&gt;</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(age, sex, month) <span class="sc">|&gt;</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarize</span>(</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">n_people =</span> <span class="fu">n</span>(),</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">median_rating =</span> <span class="fu">median</span>(rating)</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">relocate</span>(sex, <span class="dv">1</span>) <span class="sc">|&gt;</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(sex, age)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stderr">
+<pre><code>`summarise()` has grouped output by 'age', 'sex'. You can override using the
+`.groups` argument.</code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>tb_age_rating <span class="sc">|&gt;</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(age, median_rating, <span class="at">size =</span> n_people, <span class="at">color =</span> month, <span class="at">alpha =</span> <span class="fl">0.7</span>)) <span class="sc">+</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>() <span class="sc">+</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="fu">vars</span>(sex))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="2025_09_23_FIDE_Chess_files/figure-html/age-rating-stats-1.png" class="img-fluid figure-img" width="672"></p>
+<figcaption>The median rating at each age peaks around 25. Data too sparse in some places to take the median at every age.</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>Median Elo seems to peak around 25, but some of the data is too sparse in places. Need to use age groups. Also, looks like rating inflate.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>tb_ratings_both <span class="ot">&lt;-</span> tb_ratings <span class="sc">|&gt;</span> </span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">anti_join</span>(<span class="fu">bind_rows</span>(tb_added, tb_removed), <span class="fu">join_by</span>(id)) <span class="sc">|&gt;</span> </span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">id =</span> <span class="fu">factor</span>(id))</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>tb_ratings_both_wide <span class="ot">&lt;-</span> tb_ratings_both <span class="sc">|&gt;</span> </span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_wider</span>(<span class="at">names_from =</span> month, <span class="at">values_from =</span> <span class="fu">c</span>(rating, games)) <span class="sc">|&gt;</span> </span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">drop_na</span>(<span class="fu">contains</span>(<span class="st">"game"</span>))</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>tb_ratings_change <span class="ot">&lt;-</span> tb_ratings_both_wide <span class="sc">|&gt;</span> </span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">rating_change =</span> rating_September <span class="sc">-</span> rating_August)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>n_active_aug <span class="ot">&lt;-</span> <span class="fu">length</span>(fide_ratings_august<span class="sc">$</span>id)</span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>n_logged_aug <span class="ot">&lt;-</span> <span class="fu">length</span>(tb_ratings_august<span class="sc">$</span>id)</span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>percent_log_aug <span class="ot">&lt;-</span> <span class="fu">round</span>(n_logged_aug <span class="sc">/</span> n_active_aug <span class="sc">*</span> <span class="dv">100</span>, <span class="dv">0</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-</div>
-<p>Of the <strong>201015</strong> active players in August, <strong>45118 (22%)</strong> FIDE chess players actually logged a game that month.</p>
-<div class="cell">
-<details class="code-fold">
-<summary>Code</summary>
-<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>tb_age_quant_aug <span class="ot">&lt;-</span> tb_ratings_august <span class="sc">|&gt;</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">group_by</span>(sex) <span class="sc">|&gt;</span> </span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">reframe</span>(</span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>        <span class="at">prob =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="fl">0.1</span>, <span class="fl">0.5</span>, <span class="fl">0.9</span>, <span class="dv">1</span>),</span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>        <span class="at">quant =</span> <span class="fu">quantile</span>(age, prob)</span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="co"># plt_age_hist_aug &lt;- </span></span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>tb_ratings_august <span class="sc">|&gt;</span> </span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    <span class="fu">ggplot</span>(<span class="fu">aes</span>((<span class="fu">year</span>(<span class="fu">today</span>()) <span class="sc">-</span> bday))) <span class="sc">+</span></span>
-<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_histogram</span>() <span class="sc">+</span></span>
-<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"age"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>tb_ratings_change <span class="sc">|&gt;</span> </span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(rating_change)) <span class="sc">+</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_histogram</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output cell-output-stderr">
 <pre><code>`stat_bin()` using `bins = 30`. Pick better value `binwidth`.</code></pre>
@@ -217,65 +427,484 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <div class="cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="2025_09_23_FIDE_Chess_files/figure-html/age-stats-1.png" class="img-fluid figure-img" width="672"></p>
+<p><img src="2025_09_23_FIDE_Chess_files/figure-html/plt-rating-change-hist-1.png" class="img-fluid figure-img" width="672"></p>
 </figure>
 </div>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>t_test_change <span class="ot">&lt;-</span> <span class="fu">t.test</span>(tb_ratings_change<span class="sc">$</span>rating_change)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+<p>The average player improved their Elo from August to September by 4 with 95% CI [3.1273579, 4.3906117].</p>
+<div class="cell" data-tbl-cap="Top 5 Elo changes from August to September for each title category.">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>tb_ratings_change <span class="sc">|&gt;</span> </span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">abs_change =</span> <span class="fu">abs</span>(rating_change)) <span class="sc">|&gt;</span> </span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(<span class="fu">desc</span>(abs_change)) <span class="sc">|&gt;</span> </span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(name, sex, age, fed, title, rating_September, rating_change) <span class="sc">|&gt;</span> </span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(title) <span class="sc">|&gt;</span> </span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">slice_head</span>(<span class="at">n =</span> <span class="dv">5</span>) <span class="sc">|&gt;</span> </span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<caption>Top 5 Elo changes from August to September for each title category.</caption>
+<colgroup>
+<col style="width: 39%">
+<col style="width: 4%">
+<col style="width: 4%">
+<col style="width: 4%">
+<col style="width: 7%">
+<col style="width: 20%">
+<col style="width: 17%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">name</th>
+<th style="text-align: left;">sex</th>
+<th style="text-align: right;">age</th>
+<th style="text-align: left;">fed</th>
+<th style="text-align: left;">title</th>
+<th style="text-align: right;">rating_September</th>
+<th style="text-align: right;">rating_change</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Moses, Neil</td>
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">14</td>
+<td style="text-align: left;">CAN</td>
+<td style="text-align: left;">CM</td>
+<td style="text-align: right;">2056</td>
+<td style="text-align: right;">-178</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Przybylski, Bartosz</td>
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">18</td>
+<td style="text-align: left;">POL</td>
+<td style="text-align: left;">CM</td>
+<td style="text-align: right;">2207</td>
+<td style="text-align: right;">166</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Vaidyanathan, Kannan</td>
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">12</td>
+<td style="text-align: left;">USA</td>
+<td style="text-align: left;">CM</td>
+<td style="text-align: right;">2248</td>
+<td style="text-align: right;">165</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Dogan, Umut Anil</td>
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">14</td>
+<td style="text-align: left;">TUR</td>
+<td style="text-align: left;">CM</td>
+<td style="text-align: right;">2239</td>
+<td style="text-align: right;">163</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">De Jong, Lode</td>
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">15</td>
+<td style="text-align: left;">NED</td>
+<td style="text-align: left;">CM</td>
+<td style="text-align: right;">1978</td>
+<td style="text-align: right;">-162</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Bekker, Maxim</td>
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">35</td>
+<td style="text-align: left;">RUS</td>
+<td style="text-align: left;">FM</td>
+<td style="text-align: right;">2079</td>
+<td style="text-align: right;">-150</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Yildiz, Egehan</td>
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">16</td>
+<td style="text-align: left;">TUR</td>
+<td style="text-align: left;">FM</td>
+<td style="text-align: right;">2271</td>
+<td style="text-align: right;">130</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Nemeth, Zalan</td>
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">23</td>
+<td style="text-align: left;">IRL</td>
+<td style="text-align: left;">FM</td>
+<td style="text-align: right;">2206</td>
+<td style="text-align: right;">-120</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Gusev, Mikhail</td>
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">16</td>
+<td style="text-align: left;">SRB</td>
+<td style="text-align: left;">FM</td>
+<td style="text-align: right;">2140</td>
+<td style="text-align: right;">-105</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Zhauynbay, Alimzhan</td>
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">11</td>
+<td style="text-align: left;">KAZ</td>
+<td style="text-align: left;">FM</td>
+<td style="text-align: right;">1968</td>
+<td style="text-align: right;">-103</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Nguyen, Duc Hoa</td>
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">36</td>
+<td style="text-align: left;">VIE</td>
+<td style="text-align: left;">GM</td>
+<td style="text-align: right;">2442</td>
+<td style="text-align: right;">46</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Ilincic, Zlatko</td>
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">57</td>
+<td style="text-align: left;">SRB</td>
+<td style="text-align: left;">GM</td>
+<td style="text-align: right;">2201</td>
+<td style="text-align: right;">-45</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Malisauskas, Vidmantas</td>
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">62</td>
+<td style="text-align: left;">LTU</td>
+<td style="text-align: left;">GM</td>
+<td style="text-align: right;">2258</td>
+<td style="text-align: right;">-42</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Golubka, Petro</td>
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">36</td>
+<td style="text-align: left;">UKR</td>
+<td style="text-align: left;">GM</td>
+<td style="text-align: right;">2369</td>
+<td style="text-align: right;">40</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Munkhgal, Gombosuren</td>
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">37</td>
+<td style="text-align: left;">MGL</td>
+<td style="text-align: left;">GM</td>
+<td style="text-align: right;">2363</td>
+<td style="text-align: right;">-38</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Balaji, Aaravamudhan</td>
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">20</td>
+<td style="text-align: left;">ENG</td>
+<td style="text-align: left;">IM</td>
+<td style="text-align: right;">2297</td>
+<td style="text-align: right;">-97</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Simpson, Michael</td>
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">18</td>
+<td style="text-align: left;">RSA</td>
+<td style="text-align: left;">IM</td>
+<td style="text-align: right;">2135</td>
+<td style="text-align: right;">-94</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Vasquez Toledo, Cristian</td>
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">29</td>
+<td style="text-align: left;">CHI</td>
+<td style="text-align: left;">IM</td>
+<td style="text-align: right;">2283</td>
+<td style="text-align: right;">-77</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Lu, Ming</td>
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">19</td>
+<td style="text-align: left;">USA</td>
+<td style="text-align: left;">IM</td>
+<td style="text-align: right;">2273</td>
+<td style="text-align: right;">71</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Large, Peter G</td>
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">69</td>
+<td style="text-align: left;">ENG</td>
+<td style="text-align: left;">IM</td>
+<td style="text-align: right;">2233</td>
+<td style="text-align: right;">-58</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Mansurova, Mumtozbegim</td>
+<td style="text-align: left;">F</td>
+<td style="text-align: right;">16</td>
+<td style="text-align: left;">UZB</td>
+<td style="text-align: left;">WCM</td>
+<td style="text-align: right;">1996</td>
+<td style="text-align: right;">155</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Agarwal, Amaya</td>
+<td style="text-align: left;">F</td>
+<td style="text-align: right;">10</td>
+<td style="text-align: left;">ENG</td>
+<td style="text-align: left;">WCM</td>
+<td style="text-align: right;">1818</td>
+<td style="text-align: right;">-145</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Chavarria Troya, Keytleen Denis</td>
+<td style="text-align: left;">F</td>
+<td style="text-align: right;">14</td>
+<td style="text-align: left;">PAN</td>
+<td style="text-align: left;">WCM</td>
+<td style="text-align: right;">1684</td>
+<td style="text-align: right;">-134</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Calugareanu, Ioana-Denisa</td>
+<td style="text-align: left;">F</td>
+<td style="text-align: right;">16</td>
+<td style="text-align: left;">ROU</td>
+<td style="text-align: left;">WCM</td>
+<td style="text-align: right;">1895</td>
+<td style="text-align: right;">-129</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Montiel Marin, Micaela Agustina</td>
+<td style="text-align: left;">F</td>
+<td style="text-align: right;">17</td>
+<td style="text-align: left;">ARG</td>
+<td style="text-align: left;">WCM</td>
+<td style="text-align: right;">1738</td>
+<td style="text-align: right;">-125</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Ziobrowska, Maja</td>
+<td style="text-align: left;">F</td>
+<td style="text-align: right;">17</td>
+<td style="text-align: left;">POL</td>
+<td style="text-align: left;">WFM</td>
+<td style="text-align: right;">1883</td>
+<td style="text-align: right;">-189</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Li Chen, Helena Joana</td>
+<td style="text-align: left;">F</td>
+<td style="text-align: right;">16</td>
+<td style="text-align: left;">ESP</td>
+<td style="text-align: left;">WFM</td>
+<td style="text-align: right;">2159</td>
+<td style="text-align: right;">149</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Tarasenka, Aliaksandra</td>
+<td style="text-align: left;">F</td>
+<td style="text-align: right;">19</td>
+<td style="text-align: left;">BLR</td>
+<td style="text-align: left;">WFM</td>
+<td style="text-align: right;">2266</td>
+<td style="text-align: right;">137</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Tokarz, Izabela</td>
+<td style="text-align: left;">F</td>
+<td style="text-align: right;">18</td>
+<td style="text-align: left;">POL</td>
+<td style="text-align: left;">WFM</td>
+<td style="text-align: right;">1962</td>
+<td style="text-align: right;">-128</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Fei, Irene Jiao</td>
+<td style="text-align: left;">F</td>
+<td style="text-align: right;">12</td>
+<td style="text-align: left;">USA</td>
+<td style="text-align: left;">WFM</td>
+<td style="text-align: right;">1981</td>
+<td style="text-align: right;">122</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Li, Xueyi</td>
+<td style="text-align: left;">F</td>
+<td style="text-align: right;">32</td>
+<td style="text-align: left;">CHN</td>
+<td style="text-align: left;">WGM</td>
+<td style="text-align: right;">2191</td>
+<td style="text-align: right;">-77</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Doluhanova, Evgeniya</td>
+<td style="text-align: left;">F</td>
+<td style="text-align: right;">41</td>
+<td style="text-align: left;">UKR</td>
+<td style="text-align: left;">WGM</td>
+<td style="text-align: right;">2208</td>
+<td style="text-align: right;">-64</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Navrotescu, Andreea</td>
+<td style="text-align: left;">F</td>
+<td style="text-align: right;">29</td>
+<td style="text-align: left;">FRA</td>
+<td style="text-align: left;">WGM</td>
+<td style="text-align: right;">2277</td>
+<td style="text-align: right;">-58</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Nandhidhaa, P V</td>
+<td style="text-align: left;">F</td>
+<td style="text-align: right;">29</td>
+<td style="text-align: left;">IND</td>
+<td style="text-align: left;">WGM</td>
+<td style="text-align: right;">2302</td>
+<td style="text-align: right;">-42</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Mammadova, Narmin</td>
+<td style="text-align: left;">F</td>
+<td style="text-align: right;">26</td>
+<td style="text-align: left;">AZE</td>
+<td style="text-align: left;">WGM</td>
+<td style="text-align: right;">2183</td>
+<td style="text-align: right;">-37</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Mrudul Dehankar</td>
+<td style="text-align: left;">F</td>
+<td style="text-align: right;">21</td>
+<td style="text-align: left;">IND</td>
+<td style="text-align: left;">WIM</td>
+<td style="text-align: right;">2244</td>
+<td style="text-align: right;">134</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Mou, Iris</td>
+<td style="text-align: left;">F</td>
+<td style="text-align: right;">16</td>
+<td style="text-align: left;">USA</td>
+<td style="text-align: left;">WIM</td>
+<td style="text-align: right;">2152</td>
+<td style="text-align: right;">-89</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Franco Valencia, Angela</td>
+<td style="text-align: left;">F</td>
+<td style="text-align: right;">38</td>
+<td style="text-align: left;">COL</td>
+<td style="text-align: left;">WIM</td>
+<td style="text-align: right;">2194</td>
+<td style="text-align: right;">73</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Gomez Barrera, Javiera Belen</td>
+<td style="text-align: left;">F</td>
+<td style="text-align: right;">23</td>
+<td style="text-align: left;">CHI</td>
+<td style="text-align: left;">WIM</td>
+<td style="text-align: right;">2173</td>
+<td style="text-align: right;">-64</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Chandreyee, Hajra</td>
+<td style="text-align: left;">F</td>
+<td style="text-align: right;">26</td>
+<td style="text-align: left;">IND</td>
+<td style="text-align: left;">WIM</td>
+<td style="text-align: right;">2138</td>
+<td style="text-align: right;">62</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Shroff, Dhairya Amit</td>
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">9</td>
+<td style="text-align: left;">CAN</td>
+<td style="text-align: left;">NA</td>
+<td style="text-align: right;">1832</td>
+<td style="text-align: right;">349</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Kim, Yubin</td>
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">17</td>
+<td style="text-align: left;">KOR</td>
+<td style="text-align: left;">NA</td>
+<td style="text-align: right;">1984</td>
+<td style="text-align: right;">273</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Hasanov, Ramin</td>
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">22</td>
+<td style="text-align: left;">AZE</td>
+<td style="text-align: left;">NA</td>
+<td style="text-align: right;">1506</td>
+<td style="text-align: right;">-268</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Kiryanova, Snezhana</td>
+<td style="text-align: left;">F</td>
+<td style="text-align: right;">17</td>
+<td style="text-align: left;">RUS</td>
+<td style="text-align: left;">NA</td>
+<td style="text-align: right;">1562</td>
+<td style="text-align: right;">-265</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Burkitbayev, Aibar</td>
+<td style="text-align: left;">M</td>
+<td style="text-align: right;">12</td>
+<td style="text-align: left;">KAZ</td>
+<td style="text-align: left;">NA</td>
+<td style="text-align: right;">1875</td>
+<td style="text-align: right;">258</td>
+</tr>
+</tbody>
+</table>
 </div>
 </div>
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>tb_age_rating_aug <span class="ot">&lt;-</span> tb_ratings_august <span class="sc">|&gt;</span> </span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">group_by</span>(age, sex) <span class="sc">|&gt;</span> </span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">summarize</span>(</span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>        <span class="at">n_people =</span> <span class="fu">n</span>(),</span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>        <span class="at">median_rating =</span> <span class="fu">median</span>(rating)</span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>        ) <span class="sc">|&gt;</span> </span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    <span class="fu">relocate</span>(sex, <span class="dv">1</span>) <span class="sc">|&gt;</span> </span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    <span class="fu">arrange</span>(sex, age)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>tb_title_summary <span class="ot">&lt;-</span> tb_ratings <span class="sc">|&gt;</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(sex, month) <span class="sc">|&gt;</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">count</span>(title, <span class="at">name =</span> <span class="st">"n_people"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">add_count</span>(sex, <span class="at">wt =</span> n_people, <span class="at">name =</span> <span class="st">"total"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">percent_title =</span> <span class="fu">round</span>(n_people <span class="sc">/</span> total <span class="sc">*</span> <span class="dv">100</span>, <span class="dv">2</span>))</span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>tb_ratings <span class="sc">|&gt;</span></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="sc">!</span><span class="fu">is.na</span>(title)) <span class="sc">|&gt;</span></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(title, <span class="at">fill =</span> month)) <span class="sc">+</span></span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_histogram</span>(<span class="at">stat =</span> <span class="st">"count"</span>, <span class="at">position =</span> <span class="st">"identity"</span>) <span class="sc">+</span></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="fu">vars</span>(sex))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output cell-output-stderr">
-<pre><code>`summarise()` has grouped output by 'age'. You can override using the `.groups`
-argument.</code></pre>
-</div>
-<details class="code-fold">
-<summary>Code</summary>
-<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>tb_age_rating_aug <span class="sc">|&gt;</span> </span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">ggplot</span>(<span class="fu">aes</span>(age, median_rating, <span class="at">size =</span> n_people, <span class="at">alpha =</span> <span class="fl">0.7</span>)) <span class="sc">+</span></span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_point</span>() <span class="sc">+</span></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">facet_wrap</span>(<span class="fu">vars</span>(sex))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div class="cell-output-display">
-<div>
-<figure class="figure">
-<p><img src="2025_09_23_FIDE_Chess_files/figure-html/age-rating-stats-1.png" class="img-fluid figure-img" width="672"></p>
-</figure>
-</div>
-</div>
-</div>
-<div class="cell">
-<details class="code-fold">
-<summary>Code</summary>
-<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>tb_title_summary <span class="ot">&lt;-</span> tb_ratings_august <span class="sc">|&gt;</span> </span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">group_by</span>(sex) <span class="sc">|&gt;</span> </span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">count</span>(title, <span class="at">name =</span> <span class="st">"n_people"</span>) <span class="sc">|&gt;</span> </span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add_count</span>(sex, <span class="at">wt =</span> n_people, <span class="at">name =</span> <span class="st">"total"</span>) <span class="sc">|&gt;</span> </span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">percent_title =</span> <span class="fu">round</span>(n_people <span class="sc">/</span> total <span class="sc">*</span> <span class="dv">100</span>, <span class="dv">2</span>))</span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>tb_ratings_august <span class="sc">|&gt;</span> </span>
-<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>    <span class="fu">filter</span>(<span class="sc">!</span><span class="fu">is.na</span>(title)) <span class="sc">|&gt;</span> </span>
-<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">ggplot</span>(<span class="fu">aes</span>(title)) <span class="sc">+</span></span>
-<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_histogram</span>(<span class="at">stat =</span> <span class="st">"count"</span>) <span class="sc">+</span></span>
-<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>    <span class="fu">facet_wrap</span>(<span class="fu">vars</span>(sex))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div class="cell-output cell-output-stderr">
-<pre><code>Warning in geom_histogram(stat = "count"): Ignoring unknown parameters:
-`binwidth` and `bins`</code></pre>
+<pre><code>Warning in geom_histogram(stat = "count", position = "identity"): Ignoring
+unknown parameters: `binwidth` and `bins`</code></pre>
 </div>
 <div class="cell-output-display">
-<div>
+<div class="quarto-figure quarto-figure-center">
 <figure class="figure">
 <p><img src="2025_09_23_FIDE_Chess_files/figure-html/title-stats-1.png" class="img-fluid figure-img" width="672"></p>
+<figcaption>The number of women with titles shrunk generally. The number of male GMs increased.</figcaption>
 </figure>
 </div>
 </div>
@@ -283,21 +912,22 @@ argument.</code></pre>
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>tb_sex_ratio <span class="ot">&lt;-</span> tb_ratings_august <span class="sc">|&gt;</span> </span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">group_by</span>(sex, fed) <span class="sc">|&gt;</span> </span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">count</span>(age_range, <span class="at">name =</span> <span class="st">"n_people"</span>) <span class="sc">|&gt;</span> </span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">pivot_wider</span>(<span class="at">names_from =</span> sex, <span class="at">values_from =</span> n_people) <span class="sc">|&gt;</span> </span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">sex_ratio =</span> M <span class="sc">/</span> F)</span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>tb_sex_ratio <span class="sc">|&gt;</span> </span>
-<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="fu">fct_rev</span>(age_range), sex_ratio, <span class="at">size =</span> F <span class="sc">+</span> M)) <span class="sc">+</span></span>
-<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_point</span>() <span class="sc">+</span></span>
-<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"age"</span>, <span class="at">y =</span> <span class="st">"sex ratio (M:F)"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>tb_sex_ratio <span class="ot">&lt;-</span> tb_ratings <span class="sc">|&gt;</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">anti_join</span>(tb_removed <span class="sc">|&gt;</span> <span class="fu">drop_na</span>(games), <span class="fu">join_by</span>(id)) <span class="sc">|&gt;</span> </span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">distinct</span>(id, <span class="at">.keep_all =</span> T) <span class="sc">|&gt;</span> </span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(sex, fed) <span class="sc">|&gt;</span></span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">count</span>(age_range, <span class="at">name =</span> <span class="st">"n_people"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_wider</span>(<span class="at">names_from =</span> sex, <span class="at">values_from =</span> n_people) <span class="sc">|&gt;</span></span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">drop_na</span>(age_range) <span class="sc">|&gt;</span> </span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">sex_ratio =</span> M <span class="sc">/</span> F)</span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a>tb_sex_ratio <span class="sc">|&gt;</span></span>
+<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">drop_na</span>(sex_ratio) <span class="sc">|&gt;</span> </span>
+<span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="fu">fct_rev</span>(age_range), sex_ratio, <span class="at">fill =</span> age_range)) <span class="sc">+</span></span>
+<span id="cb19-13"><a href="#cb19-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_violin</span>() <span class="sc">+</span></span>
+<span id="cb19-14"><a href="#cb19-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>(<span class="fu">aes</span>(<span class="at">size =</span> F <span class="sc">+</span> M), <span class="at">alpha =</span> <span class="fl">0.6</span>) <span class="sc">+</span></span>
+<span id="cb19-15"><a href="#cb19-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"age"</span>, <span class="at">y =</span> <span class="st">"sex ratio (M:F)"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
-<div class="cell-output cell-output-stderr">
-<pre><code>Warning: Removed 481 rows containing missing values or values outside the scale range
-(`geom_point()`).</code></pre>
-</div>
 <div class="cell-output-display">
 <div>
 <figure class="figure">
@@ -306,7 +936,52 @@ argument.</code></pre>
 </div>
 </div>
 </div>
+<p>There are 177 Feds and 9 age ranges (total = 1231). Of those 1231 fed-age-group pairings, 454 lack one or both sexes, giving, making the sex ratio for that pairing <em>NA</em>.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb20"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>tb_sex_ratio <span class="sc">|&gt;</span> <span class="fu">group_by</span>(age_range) <span class="sc">|&gt;</span> <span class="fu">slice_max</span>(sex_ratio)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 9 × 5
+# Groups:   age_range [9]
+  fed   age_range     F     M sex_ratio
+  &lt;fct&gt; &lt;fct&gt;     &lt;int&gt; &lt;int&gt;     &lt;dbl&gt;
+1 KOR   5 - 9         1    27      27  
+2 SCO   10 - 14       1    21      21  
+3 HKG   15 - 19       3    39      13  
+4 SWE   20 - 24       1    49      49  
+5 CAN   25 - 29       1    59      59  
+6 MEX   30 - 39       3   107      35.7
+7 SWE   40 - 49       1    77      77  
+8 IND   50 - 59       2   312     156  
+9 CZE   over 60       2   174      87  </code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb22"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>tb_sex_ratio <span class="sc">|&gt;</span> <span class="fu">group_by</span>(age_range) <span class="sc">|&gt;</span> <span class="fu">slice_min</span>(sex_ratio)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 12 × 5
+# Groups:   age_range [9]
+   fed   age_range     F     M sex_ratio
+   &lt;fct&gt; &lt;fct&gt;     &lt;int&gt; &lt;int&gt;     &lt;dbl&gt;
+ 1 POR   5 - 9         5     3     0.6  
+ 2 NGR   10 - 14       8     4     0.5  
+ 3 CPV   15 - 19       4     3     0.75 
+ 4 TJK   15 - 19       4     3     0.75 
+ 5 INA   20 - 24       3     1     0.333
+ 6 EST   25 - 29       2     1     0.5  
+ 7 ISL   30 - 39       2     1     0.5  
+ 8 VIE   40 - 49       2     1     0.5  
+ 9 BER   50 - 59       1     1     1    
+10 GUA   50 - 59       1     1     1    
+11 EST   over 60       1     1     1    
+12 MNC   over 60       1     1     1    </code></pre>
+</div>
+</div>
 <p>Wanted to look at sex ratios by Fed, but there are 166 Feds. Might be cool to make a map of total chess players and sex ratio by Fed over time.</p>
+</section>
 </section>
 
 </main>

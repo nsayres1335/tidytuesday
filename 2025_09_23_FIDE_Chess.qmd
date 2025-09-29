@@ -15,7 +15,6 @@ code-fold: true
 
 library(tidyverse)
 library(knitr)
-library(emmeans)
 ```
 
 # Intro
@@ -67,13 +66,13 @@ fide_ratings_september <- tuesdata$fide_ratings_september
 tb_ratings_raw <- bind_rows(list(August = fide_ratings_august, September = fide_ratings_september), .id = "month") |> 
     arrange(id, month)
 
-n_active <- n_distinct(tb_ratings_raw$id)
+n_active <- dplyr::n_distinct(tb_ratings_raw$id)
 
 tb_removed <- anti_join(fide_ratings_august, fide_ratings_september, "id")
 tb_added <- anti_join(fide_ratings_september, fide_ratings_august, "id")
 ```
 
-`r n_distinct(tb_removed$id)` members were removed, while `r n_distinct(tb_added$id)` members were added in September.
+`r dplyr::n_distinct(tb_removed$id)` members were removed, while `r dplyr::n_distinct(tb_added$id)` members were added in September.
 
 ```{r}
 #| label: FUNCTION-wrangle-ratings
@@ -137,7 +136,7 @@ tb_ratings <- wrangle_ratings(tb_ratings_raw)
 tb_ratings_summary <- tb_ratings_raw |> 
     group_by(month) |> 
     summarise(
-        n_active = n_distinct(id),
+        n_active = dplyr::n_distinct(id),
         n_logged = sum(games > 0),
         percent_log = round(n_logged / n_active * 100, 1)
         )
@@ -218,13 +217,27 @@ tb_ratings_change |>
   ggplot(aes(rating_change)) +
   geom_histogram()
 
-t.test(tb_ratings_change$rating_change)
+t_test_change <- t.test(tb_ratings_change$rating_change)
 ```
 
-There was a mean improvement in Elo of `r round(mean(tb_ratings_change$rating_change), 0)` .
+The average player improved their Elo from August to September by `r round(mean(tb_ratings_change$rating_change), 0)` with 95% CI [`r t_test_change$conf.int[[1]]`, `r t_test_change$conf.int[[2]]`]. 
+
+```{r}
+#| label: biggest-changes
+#| tbl-cap: Top 5 Elo changes from August to September for each title category.
+
+tb_ratings_change |> 
+  mutate(abs_change = abs(rating_change)) |> 
+  arrange(desc(abs_change)) |> 
+  select(name, sex, age, fed, title, rating_September, rating_change) |> 
+  group_by(title) |> 
+  slice_head(n = 5) |> 
+  kable()
+```
 
 ```{r}
 #| label: title-stats
+#| fig-cap: The number of women with titles shrunk generally. The number of male GMs increased.
 
 tb_title_summary <- tb_ratings |>
   group_by(sex, month) |>
@@ -232,26 +245,42 @@ tb_title_summary <- tb_ratings |>
   add_count(sex, wt = n_people, name = "total") |>
   mutate(percent_title = round(n_people / total * 100, 2))
 
-tb_ratings_august |>
+tb_ratings |>
   filter(!is.na(title)) |>
-  ggplot(aes(title)) +
-  geom_histogram(stat = "count") +
+  ggplot(aes(title, fill = month)) +
+  geom_histogram(stat = "count", position = "identity") +
   facet_wrap(vars(sex))
 ```
 
 ```{r}
 #| label: sex-ratio-age
 
-tb_sex_ratio <- tb_ratings_august |>
+tb_sex_ratio <- tb_ratings |>
+  anti_join(tb_removed |> drop_na(games), join_by(id)) |> 
+  distinct(id, .keep_all = T) |> 
   group_by(sex, fed) |>
   count(age_range, name = "n_people") |>
   pivot_wider(names_from = sex, values_from = n_people) |>
+  drop_na(age_range) |> 
   mutate(sex_ratio = M / F)
 
 tb_sex_ratio |>
-  ggplot(aes(fct_rev(age_range), sex_ratio, size = F + M)) +
-  geom_point() +
+  drop_na(sex_ratio) |> 
+  ggplot(aes(fct_rev(age_range), sex_ratio, fill = age_range)) +
+  geom_violin() +
+  geom_point(aes(size = F + M), alpha = 0.6) +
   labs(x = "age", y = "sex ratio (M:F)")
 ```
 
+There are `r  dplyr::n_distinct(tb_sex_ratio$fed)` Feds and `r  dplyr::n_distinct(tb_sex_ratio$age_range)` age ranges (total = `r nrow(tb_sex_ratio)`). Of those `r nrow(tb_sex_ratio)` fed-age-group pairings, `r sum(is.na(tb_sex_ratio$sex_ratio))` lack one or both sexes, giving, making the sex ratio for that pairing *NA*. 
+
+```{r}
+#| label: sex-ratio-explore
+
+tb_sex_ratio |> group_by(age_range) |> slice_max(sex_ratio) |> kable()
+
+tb_sex_ratio |> group_by(age_range) |> slice_min(sex_ratio) |> kable()
+```
+
 Wanted to look at sex ratios by Fed, but there are 166 Feds. Might be cool to make a map of total chess players and sex ratio by Fed over time.
+
