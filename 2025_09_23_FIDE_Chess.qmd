@@ -15,6 +15,8 @@ code-fold: true
 
 library(tidyverse)
 library(knitr)
+library(sf)
+library(spData)
 ```
 
 # Intro
@@ -174,6 +176,38 @@ tb_ratings |>
   geom_violin()
 ```
 
+```{r}
+#| label: sex-ratio-age
+
+tb_sex_ratio <- tb_ratings |>
+  anti_join(tb_removed |> drop_na(games), join_by(id)) |> 
+  distinct(id, .keep_all = T) |> 
+  group_by(sex, fed) |>
+  count(age_range, name = "n_people") |>
+  pivot_wider(names_from = sex, values_from = n_people) |>
+  drop_na(age_range) |> 
+  mutate(sex_ratio = M / F)
+
+tb_sex_ratio |>
+  drop_na(sex_ratio) |> 
+  ggplot(aes(fct_rev(age_range), sex_ratio, fill = age_range)) +
+  geom_violin() +
+  geom_point(aes(size = F + M), alpha = 0.6) +
+  labs(x = "age", y = "sex ratio (M:F)")
+```
+
+There are `r  dplyr::n_distinct(tb_sex_ratio$fed)` Feds and `r  dplyr::n_distinct(tb_sex_ratio$age_range)` age ranges (total = `r nrow(tb_sex_ratio)` groups). Of those `r nrow(tb_sex_ratio)` fed-age-group pairings, `r sum(is.na(tb_sex_ratio$sex_ratio))` lack one or both sexes, giving, making the sex ratio for that pairing *NA*.
+
+```{r}
+#| label: sex-ratio-explore
+
+tb_sex_ratio |> group_by(age_range) |> slice_max(sex_ratio) |> mutate(sex_ratio = round(sex_ratio, 2)) |> kable()
+
+tb_sex_ratio |> group_by(age_range) |> slice_min(sex_ratio) |> mutate(sex_ratio = round(sex_ratio, 2)) |> kable()
+```
+
+Wanted to look at sex ratios by Fed, but there are 177 Feds. Might be cool to make a map of total chess players and sex ratio by Fed over time. After looking for a while, can't find a dataset that maps Fed codes to their long name, making a join to a world map dataset more manual than I want to do. 
+
 ## Age and Rating
 ```{r}
 #| label: age-rating-stats
@@ -211,6 +245,8 @@ tb_ratings_change <- tb_ratings_both_wide |>
   mutate(rating_change = rating_September - rating_August)
 ```
 
+## Rating Changes
+
 ```{r}
 #| label: plt-rating-change-hist
 
@@ -236,9 +272,27 @@ tb_ratings_change |>
   kable()
 ```
 
+## Titles
+
 ```{r}
-#| label: title-stats
-#| fig-cap: The number of women with titles shrunk generally. The number of male GMs increased.
+#| label: most-titled-fed
+
+tb_fed_title_summary <- tb_ratings |>
+  filter(month == "September") |> 
+  group_by(fed) |> 
+  summarize(n_titles = sum(!is.na(title))) |> 
+  arrange(desc(n_titles))
+
+tb_fed_title_summary |> 
+  slice_max(n_titles, n = 10) |> 
+  ggplot(aes(fct_reorder(fed, n_titles, .desc = T), n_titles)) +
+  geom_col() +
+  labs(x = "Fed", y = "n titles")
+```
+
+```{r}
+#| label: title-changes
+#| fig-cap: The number of women with titles shrunk generally. The number of male FMs and GMs increased.
 #| warning: false
 
 tb_title_summary <- tb_ratings |>
@@ -253,36 +307,4 @@ tb_ratings |>
   geom_histogram(stat = "count", position = "identity") +
   facet_wrap(vars(sex))
 ```
-
-```{r}
-#| label: sex-ratio-age
-
-tb_sex_ratio <- tb_ratings |>
-  anti_join(tb_removed |> drop_na(games), join_by(id)) |> 
-  distinct(id, .keep_all = T) |> 
-  group_by(sex, fed) |>
-  count(age_range, name = "n_people") |>
-  pivot_wider(names_from = sex, values_from = n_people) |>
-  drop_na(age_range) |> 
-  mutate(sex_ratio = M / F)
-
-tb_sex_ratio |>
-  drop_na(sex_ratio) |> 
-  ggplot(aes(fct_rev(age_range), sex_ratio, fill = age_range)) +
-  geom_violin() +
-  geom_point(aes(size = F + M), alpha = 0.6) +
-  labs(x = "age", y = "sex ratio (M:F)")
-```
-
-There are `r  dplyr::n_distinct(tb_sex_ratio$fed)` Feds and `r  dplyr::n_distinct(tb_sex_ratio$age_range)` age ranges (total = `r nrow(tb_sex_ratio)` groups). Of those `r nrow(tb_sex_ratio)` fed-age-group pairings, `r sum(is.na(tb_sex_ratio$sex_ratio))` lack one or both sexes, giving, making the sex ratio for that pairing *NA*. 
-
-```{r}
-#| label: sex-ratio-explore
-
-tb_sex_ratio |> group_by(age_range) |> slice_max(sex_ratio) |> mutate(sex_ratio = round(sex_ratio, 2)) |> kable()
-
-tb_sex_ratio |> group_by(age_range) |> slice_min(sex_ratio) |> mutate(sex_ratio = round(sex_ratio, 2)) |> kable()
-```
-
-Wanted to look at sex ratios by Fed, but there are 177 Feds. Might be cool to make a map of total chess players and sex ratio by Fed over time.
 
