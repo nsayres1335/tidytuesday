@@ -19,7 +19,7 @@ library(knitr)
 
 # Intro
 
-## FIDE Chess Player Ratings Background (*[Git](https://github.com/rfordatascience/tidytuesday/tree/main/data/2025/2025-09-23*))
+## FIDE Chess Player Ratings Background (*[Git](https://github.com/rfordatascience/tidytuesday/tree/main/data/2025/2025-09-23)*)
 
 This week we're exploring August and September chess player rating data from FIDE (the International Chess Federation). Monthly data files are published on the [FIDE website](https://www.fide.com/fide-september-2025-rating-list-vincent-keymer-debuts-in-top-10-open/).
 
@@ -87,7 +87,7 @@ wrangle_ratings <- function(tb_ratings) {
     ) |>
     mutate(
       age_range = case_when(
-        between(age, 5, 9) ~ "5 - 9",
+        between(age, 0, 9) ~ "0 - 9",
         between(age, 10, 14) ~ "10 - 14",
         between(age, 15, 19) ~ "15 - 19",
         between(age, 20, 24) ~ "20 - 24",
@@ -102,7 +102,7 @@ wrangle_ratings <- function(tb_ratings) {
       age_range = factor(
         age_range,
         c(
-          "5 - 9",
+          "0 - 9",
           "10 - 14",
           "15 - 19",
           "20 - 24",
@@ -138,7 +138,8 @@ tb_ratings_summary <- tb_ratings_raw |>
     summarise(
         n_active = dplyr::n_distinct(id),
         n_logged = sum(games > 0),
-        percent_log = round(n_logged / n_active * 100, 1)
+        percent_log = round(n_logged / n_active * 100, 1),
+        .groups = "keep"
         )
 
 kable(tb_ratings_summary)
@@ -193,7 +194,7 @@ tb_age_rating |>
   facet_wrap(vars(sex))
 ```
 
-Median Elo seems to peak around 25, but some of the data is too sparse in places. Need to use age groups. Also, looks like rating inflate.
+Median Elo seems to peak around 25, but some of the data is too sparse in places. Need to use age groups. Also, looks like ratings inflate.
 
 ```{r}
 #| label: pairwise-t-test
@@ -215,12 +216,12 @@ tb_ratings_change <- tb_ratings_both_wide |>
 
 tb_ratings_change |> 
   ggplot(aes(rating_change)) +
-  geom_histogram()
+  geom_histogram(binwidth = 20)
 
 t_test_change <- t.test(tb_ratings_change$rating_change)
 ```
 
-The average player improved their Elo from August to September by `r round(mean(tb_ratings_change$rating_change), 0)` with 95% CI [`r t_test_change$conf.int[[1]]`, `r t_test_change$conf.int[[2]]`]. 
+The average player improved their Elo from August to September by `r round(mean(tb_ratings_change$rating_change), 1)` with 95% CI [`r round(t_test_change$conf.int[[1]], 1)`, `r round(t_test_change$conf.int[[2]], 1)`]. 
 
 ```{r}
 #| label: biggest-changes
@@ -238,6 +239,7 @@ tb_ratings_change |>
 ```{r}
 #| label: title-stats
 #| fig-cap: The number of women with titles shrunk generally. The number of male GMs increased.
+#| warning: false
 
 tb_title_summary <- tb_ratings |>
   group_by(sex, month) |>
@@ -272,15 +274,15 @@ tb_sex_ratio |>
   labs(x = "age", y = "sex ratio (M:F)")
 ```
 
-There are `r  dplyr::n_distinct(tb_sex_ratio$fed)` Feds and `r  dplyr::n_distinct(tb_sex_ratio$age_range)` age ranges (total = `r nrow(tb_sex_ratio)`). Of those `r nrow(tb_sex_ratio)` fed-age-group pairings, `r sum(is.na(tb_sex_ratio$sex_ratio))` lack one or both sexes, giving, making the sex ratio for that pairing *NA*. 
+There are `r  dplyr::n_distinct(tb_sex_ratio$fed)` Feds and `r  dplyr::n_distinct(tb_sex_ratio$age_range)` age ranges (total = `r nrow(tb_sex_ratio)` groups). Of those `r nrow(tb_sex_ratio)` fed-age-group pairings, `r sum(is.na(tb_sex_ratio$sex_ratio))` lack one or both sexes, giving, making the sex ratio for that pairing *NA*. 
 
 ```{r}
 #| label: sex-ratio-explore
 
-tb_sex_ratio |> group_by(age_range) |> slice_max(sex_ratio) |> kable()
+tb_sex_ratio |> group_by(age_range) |> slice_max(sex_ratio) |> mutate(sex_ratio = round(sex_ratio, 2)) |> kable()
 
-tb_sex_ratio |> group_by(age_range) |> slice_min(sex_ratio) |> kable()
+tb_sex_ratio |> group_by(age_range) |> slice_min(sex_ratio) |> mutate(sex_ratio = round(sex_ratio, 2)) |> kable()
 ```
 
-Wanted to look at sex ratios by Fed, but there are 166 Feds. Might be cool to make a map of total chess players and sex ratio by Fed over time.
+Wanted to look at sex ratios by Fed, but there are 177 Feds. Might be cool to make a map of total chess players and sex ratio by Fed over time.
 
