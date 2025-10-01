@@ -15,8 +15,8 @@ code-fold: true
 
 library(tidyverse)
 library(knitr)
-library(sf)
-library(spData)
+# library(sf)
+# library(spData) couldn't find proper key Fed Abbv -> long-name
 ```
 
 # Intro
@@ -120,7 +120,7 @@ wrangle_ratings <- function(tb_ratings) {
 }
 ```
 
-Setting up age ranges and removing records of people who didn't play a game.
+Setting up age ranges (0-10, then every 5 years until 60+) and removing records of people who didn't play a game.
 
 ```{r}
 #| label: wrangle
@@ -165,6 +165,8 @@ tb_age_quant <- tb_ratings |>
 kable(tb_age_quant)
 ```
 
+Youngest player is 4. Oldest is 98. Females have a much younger median.
+
 ```{r}
 #| label: age-plt
 #| fig-cap: Lots of young people for both sexes may indicate chess is growing. The male chess player population has a denser, longer tail of older players than does the female population. 
@@ -176,27 +178,70 @@ tb_ratings |>
   geom_violin()
 ```
 
+@age-plt The female population is much younger than the male population. Generally, women were not permitted to join chess clubs until the ealy 1900's. Vera Menchik was the first woman to compete in top-level tournaments in the late 1920's. Judit Pulgar and Hou Yifan are generally acknowledged as the best female chess players of all-time. Judit Polgar's peak rating put her No. 8 in the world. See [Wikipedia(https://en.wikipedia.org/wiki/Women_in_chess)] for more info. Here's one of Polgar's most brilliant games: [link to Youtube](https://www.youtube.com/watch?v=PPXND2T4HCA).
+
 ```{r}
 #| label: sex-ratio-age
 
 tb_sex_ratio <- tb_ratings |>
-  anti_join(tb_removed |> drop_na(games), join_by(id)) |> 
-  distinct(id, .keep_all = T) |> 
+  filter(month == "September") |> 
+  distinct(id, .keep_all = T) |>
   group_by(sex, fed) |>
   count(age_range, name = "n_people") |>
   pivot_wider(names_from = sex, values_from = n_people) |>
   drop_na(age_range) |> 
-  mutate(sex_ratio = M / F)
+  mutate(sex_ratio = M / F) |> 
+  mutate(age_range = fct_rev(age_range))
 
 tb_sex_ratio |>
   drop_na(sex_ratio) |> 
   ggplot(aes(fct_rev(age_range), sex_ratio, fill = age_range)) +
   geom_violin() +
   geom_point(aes(size = F + M), alpha = 0.6) +
-  labs(x = "age", y = "sex ratio (M:F)")
+  labs(x = "age", y = "sex ratio (M:F)") +
+  scale_y_log10()
 ```
 
-There are `r  dplyr::n_distinct(tb_sex_ratio$fed)` Feds and `r  dplyr::n_distinct(tb_sex_ratio$age_range)` age ranges (total = `r nrow(tb_sex_ratio)` groups). Of those `r nrow(tb_sex_ratio)` fed-age-group pairings, `r sum(is.na(tb_sex_ratio$sex_ratio))` lack one or both sexes, giving, making the sex ratio for that pairing *NA*.
+There are `r  dplyr::n_distinct(tb_sex_ratio$fed)` Feds and `r  dplyr::n_distinct(tb_sex_ratio$age_range)` age ranges (total = `r nrow(tb_sex_ratio)` groups). Of those `r nrow(tb_sex_ratio)` fed-age-group pairings, `r sum(is.na(tb_sex_ratio$F))` and `r sum(is.na(tb_sex_ratio$M))` have no female or male players, respectively, making their sex ratios *NA*. I think it would make sense to impute *NA* player counts to 1.
+
+```{r}
+#| label: plt-sex-ratio-impute
+#| fig-cap: Violin plot of sex ratios in each age group using imputed player counts values.
+
+tb_sex_ratio_impute <- tb_sex_ratio |>
+  replace_na(list(M = 1, F = 1)) |> 
+  mutate(sex_ratio = M / F)
+
+tb_sex_ratio_impute |> 
+  mutate(age_range = fct_rev(age_range)) |> 
+  ggplot(aes(age_range, sex_ratio, fill = age_range)) +
+  geom_violin() +
+  geom_point(aes(size = F + M), alpha = 0.6) +
+  labs(x = "age", y = "sex ratio (M:F)") +
+  scale_y_log10()
+```
+
+``` {r}
+#| label: sex-ratio-NA
+#| warning: false
+
+tb_sex_ratio_NA <- tb_sex_ratio |> 
+  filter(is.na(sex_ratio))
+
+n_distinct(tb_sex_ratio_NA$fed)
+```
+
+```{r}
+#| label: plt-sex-ratio-NA-hist
+tb_sex_ratio_NA |> 
+  mutate(age_range = fct_rev(age_range)) |> 
+  ggplot(aes(age_range, fill = age_range)) +
+  geom_histogram(stat = "count")
+
+n_sex_ratio_NA <- sum(is.na(tb_sex_ratio$sex_ratio))
+```
+
+@plt-sex-ratio-NA-hist Shows the number of Feds that have *NA* sex ratios for each age range. 
 
 ```{r}
 #| label: sex-ratio-explore
@@ -206,7 +251,7 @@ tb_sex_ratio |> group_by(age_range) |> slice_max(sex_ratio) |> mutate(sex_ratio 
 tb_sex_ratio |> group_by(age_range) |> slice_min(sex_ratio) |> mutate(sex_ratio = round(sex_ratio, 2)) |> kable()
 ```
 
-Wanted to look at sex ratios by Fed, but there are 177 Feds. Might be cool to make a map of total chess players and sex ratio by Fed over time. After looking for a while, can't find a dataset that maps Fed codes to their long name, making a join to a world map dataset more manual than I want to do. 
+Would be cool to make a world map of total chess players and sex ratio by Fed over time. After looking for a while, can't find a dataset that maps Fed codes to their long name, making a join to a world map dataset more manual than I want to do. 
 
 ## Age and Rating
 ```{r}
