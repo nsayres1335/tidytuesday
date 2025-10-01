@@ -168,7 +168,7 @@ kable(tb_age_quant)
 Youngest player is 4. Oldest is 98. Females have a much younger median.
 
 ```{r}
-#| label: age-plt
+#| label: fig-age-plt
 #| fig-cap: Lots of young people for both sexes may indicate chess is growing. The male chess player population has a denser, longer tail of older players than does the female population. 
 
 # plt_age_hist_aug <-
@@ -178,7 +178,7 @@ tb_ratings |>
   geom_violin()
 ```
 
-@age-plt The female population is much younger than the male population. Generally, women were not permitted to join chess clubs until the ealy 1900's. Vera Menchik was the first woman to compete in top-level tournaments in the late 1920's. Judit Pulgar and Hou Yifan are generally acknowledged as the best female chess players of all-time. Judit Polgar's peak rating put her No. 8 in the world. See [Wikipedia(https://en.wikipedia.org/wiki/Women_in_chess)] for more info. Here's one of Polgar's most brilliant games: [link to Youtube](https://www.youtube.com/watch?v=PPXND2T4HCA).
+@fig-age-plt The female population is much younger than the male population. Generally, women were not permitted to join chess clubs until the ealy 1900's. Vera Menchik was the first woman to compete in top-level tournaments in the late 1920's. Judit Pulgar and Hou Yifan are generally acknowledged as the best female chess players of all-time. Judit Polgar's peak rating put her No. 8 in the world. See [Wikipedia(https://en.wikipedia.org/wiki/Women_in_chess)] for more info. Here's one of Polgar's most brilliant games: [link to Youtube](https://www.youtube.com/watch?v=PPXND2T4HCA).
 
 ```{r}
 #| label: sex-ratio-age
@@ -205,18 +205,21 @@ tb_sex_ratio |>
 There are `r  dplyr::n_distinct(tb_sex_ratio$fed)` Feds and `r  dplyr::n_distinct(tb_sex_ratio$age_range)` age ranges (total = `r nrow(tb_sex_ratio)` groups). Of those `r nrow(tb_sex_ratio)` fed-age-group pairings, `r sum(is.na(tb_sex_ratio$F))` and `r sum(is.na(tb_sex_ratio$M))` have no female or male players, respectively, making their sex ratios *NA*. I think it would make sense to impute *NA* player counts to 1.
 
 ```{r}
-#| label: plt-sex-ratio-impute
+#| label: fig-sex-ratio-impute
 #| fig-cap: Violin plot of sex ratios in each age group using imputed player counts values.
+#| warning: false
 
 tb_sex_ratio_impute <- tb_sex_ratio |>
-  replace_na(list(M = 1, F = 1)) |> 
-  mutate(sex_ratio = M / F)
+  mutate(
+    F_impute = replace_na(F, 1),
+    M_impute = replace_na(M, 1),
+    sex_ratio_impute = M_impute / F_impute)
 
 tb_sex_ratio_impute |> 
   mutate(age_range = fct_rev(age_range)) |> 
-  ggplot(aes(age_range, sex_ratio, fill = age_range)) +
+  ggplot(aes(age_range, sex_ratio_impute, fill = age_range)) +
   geom_violin() +
-  geom_point(aes(size = F + M), alpha = 0.6) +
+  geom_point(aes(size = F_impute + M_impute), alpha = 0.6) +
   labs(x = "age", y = "sex ratio (M:F)") +
   scale_y_log10()
 ```
@@ -232,7 +235,9 @@ n_distinct(tb_sex_ratio_NA$fed)
 ```
 
 ```{r}
-#| label: plt-sex-ratio-NA-hist
+#| label: fig-sex-ratio-NA-hist
+#| warning: false
+
 tb_sex_ratio_NA |> 
   mutate(age_range = fct_rev(age_range)) |> 
   ggplot(aes(age_range, fill = age_range)) +
@@ -241,7 +246,69 @@ tb_sex_ratio_NA |>
 n_sex_ratio_NA <- sum(is.na(tb_sex_ratio$sex_ratio))
 ```
 
-@plt-sex-ratio-NA-hist Shows the number of Feds that have *NA* sex ratios for each age range. 
+@fig-sex-ratio-NA-hist shows the number of Feds that have *NA* sex ratios for each age range. 
+
+```{r}
+#| label: fig-sex-ratio-NA-ecdf
+
+tb_males_imputed <- tb_sex_ratio_impute |>
+  ungroup() |> 
+  filter(is.na(M) | is.na(F)) |> 
+  mutate(sex = "M", is_imputed = "imputed") |> 
+  select(sex, is_imputed, n = M_impute)
+
+tb_males_not_imputed <- tb_sex_ratio_impute |>
+  ungroup() |> 
+  filter(!(is.na(M) | is.na(F))) |> 
+  mutate(sex = "M", is_imputed = "not imputed") |> 
+  select(sex, is_imputed,  n = M)
+
+tb_females_imputed <- tb_sex_ratio_impute |>
+  ungroup() |> 
+  filter(is.na(M) | is.na(F)) |> 
+  mutate(sex = "F", is_imputed = "imputed") |> 
+  select(sex, is_imputed, n = F_impute)
+
+tb_females_not_imputed <- tb_sex_ratio_impute |>
+  ungroup() |> 
+  filter(!(is.na(M) | is.na(F))) |> 
+  mutate(sex = "F", is_imputed = "not imputed") |> 
+  select(sex, is_imputed, n = "F")
+
+tb_n_sex_impute <- bind_rows(
+  tb_males_imputed, tb_males_not_imputed,
+  tb_females_imputed, tb_females_not_imputed
+  ) |> 
+  ungroup() |> 
+  arrange(sex, n, desc(is_imputed)) |> 
+  group_by(sex) |> 
+  mutate(
+    n_count = seq(length(n)),
+    ecdf = n_count / length(n)) |> 
+  mutate(color = c("imputed" = "coral2", "not imputed" = "black")[is_imputed])
+  
+tb_n_sex_impute |> 
+  ggplot(aes(n, ecdf, color = is_imputed, shape = sex)) +
+  geom_point(
+    data = subset(tb_n_sex_impute |> filter(is_imputed == "not imputed")),
+    ) +
+  geom_point(
+    data = subset(tb_n_sex_impute |> filter(is_imputed == "imputed")),
+    size = 2) + 
+  scale_x_log10() +
+  facet_wrap(vars(sex))
+
+tb_n_sex_impute |> 
+  ggplot(aes(n, color = is_imputed, shape = sex)) +
+  stat_ecdf(geom = "point", pad = F) +
+  scale_x_log10() +
+  facet_wrap(vars(sex))
+
+Fn <- ecdf(tb_males_not_imputed$n)
+Fn(max(tb_males_imputed$n))
+```
+
+@fig-sex-ratio-NA-ecdf is an empircal cumulative distribution function (ECDF) of just the sex ratios that require imputation. It shows that most of the *NA*s come from Fed-age-group pairings with low total populations. Although, there are some pairings that give very high sex ratios after imputation. For example, ITA 50-59 has 266 males and 0 females active that played a game in September. 
 
 ```{r}
 #| label: sex-ratio-explore
@@ -293,7 +360,7 @@ tb_ratings_change <- tb_ratings_both_wide |>
 ## Rating Changes
 
 ```{r}
-#| label: plt-rating-change-hist
+#| label: fig-rating-change-hist
 
 tb_ratings_change |> 
   ggplot(aes(rating_change)) +
