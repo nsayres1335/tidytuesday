@@ -426,3 +426,29 @@ tb_ratings |>
   facet_wrap(vars(sex))
 ```
 
+## The Youth
+
+```{r}
+#| label: best-youth
+#| tbl-cap: Top 5 in age ranges under 20.
+
+tb_top_youth <- tb_ratings |> 
+  filter(month == "September") |> 
+  filter(between(age, 0, 19)) |> 
+  group_by(age_range, sex) |> 
+  slice_max(rating, n = 5) |> 
+  arrange(age_range, rating)
+
+tb_top_youth |> kable()
+```
+
+```{r}
+tb_top_youth_summarize <- tb_top_youth |> 
+  group_by(sex, fed) |> 
+  summarize(n_players = n(), avg_rating = mean(rating)) |> 
+  arrange(desc(n_players), desc(avg_rating))
+
+tb_top_youth_summarize |> kable()
+```
+
+India and Turkey the most top-5 strong young players. USA and CHN have particularly strong female players.
