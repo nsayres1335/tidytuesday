@@ -238,15 +238,19 @@ n_distinct(tb_sex_ratio_NA$fed)
 #| label: fig-sex-ratio-NA-hist
 #| warning: false
 
-tb_sex_ratio_NA |> 
+tb_sex_ratio_NA_long <- tb_sex_ratio_NA |> 
+  pivot_longer(c(F,M), names_to = "sex", values_to = "n_players") |> 
   mutate(age_range = fct_rev(age_range)) |> 
-  ggplot(aes(age_range, fill = age_range)) +
+  filter(is.na(n_players))
+
+tb_sex_ratio_NA_long |> 
+  ggplot(aes(age_range, fill = sex)) +
   geom_histogram(stat = "count")
 
 n_sex_ratio_NA <- sum(is.na(tb_sex_ratio$sex_ratio))
 ```
 
-@fig-sex-ratio-NA-hist shows the number of Feds that have *NA* sex ratios for each age range. 
+@fig-sex-ratio-NA-hist shows the number of Feds that have *NA* sex ratios for each age range and which sex is missing. Although some Feds have age groups with only female players, females are overwhelmingly more likely (`r round(sum(tb_sex_ratio_NA_long$sex == "F") / length(tb_sex_ratio_NA_long$sex) * 100, 0)`) to be absent than are males. Secondly, the number of missing males is relatively constant across ages groups, whereas the number of missing females increases.
 
 ```{r}
 #| label: fig-sex-ratio-NA-ecdf
@@ -287,16 +291,16 @@ tb_n_sex_impute <- bind_rows(
     ecdf = n_count / length(n)) |> 
   mutate(color = c("imputed" = "coral2", "not imputed" = "black")[is_imputed])
   
-tb_n_sex_impute |> 
-  ggplot(aes(n, ecdf, color = is_imputed, shape = sex)) +
-  geom_point(
-    data = subset(tb_n_sex_impute |> filter(is_imputed == "not imputed")),
-    ) +
-  geom_point(
-    data = subset(tb_n_sex_impute |> filter(is_imputed == "imputed")),
-    size = 2) + 
-  scale_x_log10() +
-  facet_wrap(vars(sex))
+# tb_n_sex_impute |> 
+#   ggplot(aes(n, ecdf, color = is_imputed, shape = sex)) +
+#   geom_point(
+#     data = subset(tb_n_sex_impute |> filter(is_imputed == "not imputed")),
+#     ) +
+#   geom_point(
+#     data = subset(tb_n_sex_impute |> filter(is_imputed == "imputed")),
+#     size = 2) + 
+#   scale_x_log10() +
+#   facet_wrap(vars(sex))
 
 tb_n_sex_impute |> 
   ggplot(aes(n, color = is_imputed, shape = sex)) +
@@ -304,11 +308,13 @@ tb_n_sex_impute |>
   scale_x_log10() +
   facet_wrap(vars(sex))
 
-Fn <- ecdf(tb_males_not_imputed$n)
-Fn(max(tb_males_imputed$n))
+Fn <- ecdf(tb_n_sex_impute |> filter(is_imputed == "imputed" & sex == "M") |> pull(n))
+
+tb_males_impute_max <- tb_sex_ratio_impute |> ungroup() |> filter(is.na(F))  |> slice_max(M)
+tb_males_ecdf_max <- tb_n_sex_impute |> filter(is_imputed == "imputed" & sex == "M") |>  slice_max(n)
 ```
 
-@fig-sex-ratio-NA-ecdf is an empircal cumulative distribution function (ECDF) of just the sex ratios that require imputation. It shows that most of the *NA*s come from Fed-age-group pairings with low total populations. Although, there are some pairings that give very high sex ratios after imputation. For example, ITA 50-59 has 266 males and 0 females active that played a game in September. 
+@fig-sex-ratio-NA-ecdf is an empircal cumulative distribution function (ECDF) of players in each Fed-age-range pairing by sex and highlighting the imputation population. It shows that most of the *NA*s come from Fed-age-group pairings with low total populations (n < 10 for `r round(Fn(10) * 100, 0)`% of pairings). Although, there are some pairings that give very high sex ratios after imputation. The highest of these, for example, is `r tb_males_impute_max$fed[[1]]` `r tb_males_impute_max$age_range[[1]]` with `r tb_males_impute_max$M[[1]]` males (`r round(tb_males_ecdf_max$ecdf[[1]] * 100, 0)`th percentile in total male pop) and 0 females active that played a game in September. 
 
 ```{r}
 #| label: sex-ratio-explore
